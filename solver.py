@@ -13,9 +13,10 @@ import torch.optim as optim
 from prep import printProgressBar
 from measure import compute_measure
 
-from networks import RED_CNN
+from REDCNN.networks import RED_CNN
 from MambaIR.mambair_arch import MambaIR
 from DeepGuess.architectures import ResUNet
+from UKAN.archs import UKAN
 from DenoMamba.model.denomamba_arch import DenoMamba
 
 class Solver(object):
@@ -23,6 +24,7 @@ class Solver(object):
         self.mode = args.mode
         self.load_mode = args.load_mode
         self.data_loader = data_loader
+        self.model_name = model_name
 
         if args.device:
             self.device = torch.device(args.device)
@@ -51,11 +53,13 @@ class Solver(object):
         if args.model_name == 'REDCNN':
             self.REDCNN = RED_CNN()
         elif args.model_name == 'MambaIR':
-            self.REDCNN = MambaIR()
+            self.REDCNN = MambaIR(img_size = self.patch_size, patch_size=8, in_chans=1, embed_dim=96, upscale=1, img_range=1., upsampler='')
         elif args.model_name == 'DeepGuess':
-            self.REDCNN = ResUNet(in_ch=1, out_ch=1, num_layers=4, num_filters=32, num_blocks=4, num_heads=4, num_layers_up=2, num_layers_down=2, num_layers_mid=2, num_layers_out=2, num_layers_in=2, num_layers_out=2)
+            self.REDCNN = ResUNet(img_ch=1, output_ch=1)
         elif args.model_name == 'DenoMamba':
-            self.REDCNN = DenoMamba()
+            self.REDCNN = DenoMamba(inp_channels=1, out_channels=1)
+        elif args.model_name == 'UKAN':
+            self.REDCNN = UKAN(num_classes=1, input_channels=1, img_size=self.patch_size, patch_size=8, embed_dims=[256, 320, 512])
 
         if (self.multi_gpu) and (torch.cuda.device_count() > 1):
             print('Use {} GPUs'.format(torch.cuda.device_count()))

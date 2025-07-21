@@ -1,0 +1,34 @@
+['REDCNN', 'MambaIR', 'DeepGuess', 'DenoMamba','UKAN']
+
+
+DeepGuess
+
+python main.py --mode train --model_name DeepGuess --load_mode 0 \
+--saved_path /mnt/4b9cdae1-f581-4f95-aa23-5b45c0bdf521/wday/aapm_all_npy/aapm_all_npy \
+--save_path /home/changsheng/Project/Comparison-Models/Results/DeepGuess/ \
+--num_epochs 30 \
+--patch_size 128 --batch_size 16
+
+
+MambaIR
+python main.py --mode train --model_name MambaIR --load_mode 0 \
+--saved_path /mnt/4b9cdae1-f581-4f95-aa23-5b45c0bdf521/wday/aapm_all_npy/aapm_all_npy \
+--save_path /home/changsheng/Project/Comparison-Models/Results/MambaIR/ \
+--num_epochs 30 \
+--patch_size 64 --batch_size 4
+
+
+UKAN
+python main.py --mode train --model_name UKAN --load_mode 0 \
+--saved_path /mnt/4b9cdae1-f581-4f95-aa23-5b45c0bdf521/wday/aapm_all_npy/aapm_all_npy \
+--save_path /home/changsheng/Project/Comparison-Models/Results/UKAN/ \
+--num_epochs 30 \
+--patch_size 128 --batch_size 16
+
+
+DenoMamba
+python main.py --mode train --model_name DenoMamba --load_mode 0 \
+--saved_path /mnt/4b9cdae1-f581-4f95-aa23-5b45c0bdf521/wday/aapm_all_npy/aapm_all_npy \
+--save_path /home/changsheng/Project/Comparison-Models/Results/DenoMamba/ \
+--num_epochs 30 \
+--patch_size 128 --batch_size 8

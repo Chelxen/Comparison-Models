@@ -20,7 +20,7 @@ import math
 # from mmcv.cnn import ConvModule
 # from pdb import set_trace as st
 
-from net.kan import KANLinear, KAN
+from .kan import KANLinear, KAN
 from torch.nn import init
 
 from einops import rearrange

@@ -8,7 +8,7 @@ import sys
 
 sys.path.append(".")
 sys.path.append("./model/")
-from mamba_w_transpose import Mamba
+from .mamba_w_transpose import Mamba
 
 def to_3d(x):
     return rearrange(x, 'b c h w -> b (h w) c')

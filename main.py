@@ -43,9 +43,9 @@ if __name__ == "__main__":
     parser.add_argument('--load_mode', type=int, default=0)
     parser.add_argument('--data_path', type=str, default='./AAPM-Mayo-CT-Challenge/')
 
-    parser.add_argument('--model_name', type=str, default='REDCNN', choices=['REDCNN', 'MambaIR'], help='Select different models here')
+    parser.add_argument('--model_name', type=str, default='REDCNN', choices=['REDCNN', 'MambaIR', 'DeepGuess', 'DenoMamba','UKAN'], help='Select different models here')
     
-    parser.add_argument('--saved_path', type=str, default='./npy_img/')
+    parser.add_argument('--saved_path', type=str, default='./npy_img/',help='path of the processed npy data, real dataset')
     parser.add_argument('--save_path', type=str, default='./save/')
     parser.add_argument('--test_patient', type=str, default='L506')
     parser.add_argument('--result_fig', type=bool, default=True)
