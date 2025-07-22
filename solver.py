@@ -71,16 +71,20 @@ class Solver(object):
         self.optimizer = optim.Adam(self.REDCNN.parameters(), self.lr)
 
 
-    def save_model(self, iter_):
-        f = os.path.join(self.save_path, 'REDCNN_{}iter.ckpt'.format(iter_))
+    def save_model(self, iter_, model_name, epoch=None):
+        f = os.path.join(self.save_path, '{}_{}iter.ckpt'.format(model_name, iter_))
         torch.save(self.REDCNN.state_dict(), f)
         # 保存优化器状态
-        f_opt = os.path.join(self.save_path, 'optimizer_{}iter.pth'.format(iter_))
+        f_opt = os.path.join(self.save_path, '{}_optimizer_{}iter.pth'.format(model_name, iter_))
         torch.save(self.optimizer.state_dict(), f_opt)
+        # 保存当前epoch
+        if epoch is not None:
+            with open(os.path.join(self.save_path, '{}_epoch_{}iter.txt'.format(model_name, iter_)), 'w') as f_epoch:
+                f_epoch.write(str(epoch))
 
 
-    def load_model(self, iter_):
-        f = os.path.join(self.save_path, 'REDCNN_{}iter.ckpt'.format(iter_))
+    def load_model(self, iter_, model_name):
+        f = os.path.join(self.save_path, '{}_{}iter.ckpt'.format(model_name, iter_))
         if self.multi_gpu:
             state_d = OrderedDict()
             for k, v in torch.load(f):
@@ -90,9 +94,15 @@ class Solver(object):
         else:
             self.REDCNN.load_state_dict(torch.load(f))
         # 加载优化器状态
-        f_opt = os.path.join(self.save_path, 'optimizer_{}iter.pth'.format(iter_))
+        f_opt = os.path.join(self.save_path, '{}_optimizer_{}iter.pth'.format(model_name, iter_))
         if os.path.exists(f_opt):
             self.optimizer.load_state_dict(torch.load(f_opt))
+        # 加载epoch
+        epoch_file = os.path.join(self.save_path, '{}_epoch_{}iter.txt'.format(model_name, iter_))
+        if os.path.exists(epoch_file):
+            with open(epoch_file, 'r') as f_epoch:
+                return int(f_epoch.read().strip())
+        return None
 
 
     def lr_decay(self):
@@ -136,6 +146,7 @@ class Solver(object):
         train_losses = []
         total_iters = 0
         start_time = time.time()
+        start_epoch = 1
         # resume training from checkpoint
         if hasattr(self, 'args') and getattr(self, 'args', None) is not None:
             args = self.args
@@ -143,14 +154,16 @@ class Solver(object):
             import sys
             args = sys.modules['__main__'].args if hasattr(sys.modules['__main__'], 'args') else None
         if args and getattr(args, 'resume', False) and getattr(args, 'resume_iters', 0) > 0:
-            self.load_model(args.resume_iters)
+            loaded_epoch = self.load_model(args.resume_iters, self.model_name)
             total_iters = args.resume_iters
+            if loaded_epoch is not None:
+                start_epoch = loaded_epoch + 1
             # also load loss file if it exists
-            loss_file = os.path.join(self.save_path, 'loss_{}_iter.npy'.format(args.resume_iters))
+            loss_file = os.path.join(self.save_path, '{}_loss_{}_iter.npy'.format(self.model_name, args.resume_iters))
             if os.path.exists(loss_file):
                 train_losses = list(np.load(loss_file))
 
-        for epoch in range(1, self.num_epochs):
+        for epoch in range(start_epoch, self.num_epochs):
             self.REDCNN.train(True)
 
             for iter_, (x, y) in enumerate(self.data_loader):
@@ -184,8 +197,8 @@ class Solver(object):
                     self.lr_decay()
                 # save model
                 if total_iters % self.save_iters == 0:
-                    self.save_model(total_iters)
-                    np.save(os.path.join(self.save_path, 'loss_{}_iter.npy'.format(total_iters)), np.array(train_losses))
+                    self.save_model(total_iters, self.model_name, epoch)
+                    np.save(os.path.join(self.save_path, '{}_loss_{}_iter.npy'.format(self.model_name, total_iters)), np.array(train_losses))
 
 
     def test(self):
@@ -202,7 +215,7 @@ class Solver(object):
         elif self.model_name == 'UKAN':
             self.REDCNN = UKAN(num_classes=1, input_channels=1, img_size=self.patch_size, patch_size=8, embed_dims=[256, 320, 512])
         self.REDCNN.to(self.device)
-        self.load_model(self.test_iters)
+        self.load_model(self.test_iters,self.model_name)
 
         # compute PSNR, SSIM, RMSE, LPIPS
         ori_psnr_list, ori_ssim_list, ori_rmse_list, ori_lpips_list = [], [], [], []
