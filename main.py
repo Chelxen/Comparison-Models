@@ -72,6 +72,8 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str)
     parser.add_argument('--num_workers', type=int, default=7)
     parser.add_argument('--multi_gpu', type=bool, default=False)
+    parser.add_argument('--resume', type=bool, default=False, help='resume training from checkpoint')
+    parser.add_argument('--resume_iters', type=int, default=0, help='the number of iterations to resume training from')
 
     args = parser.parse_args()
     main(args)

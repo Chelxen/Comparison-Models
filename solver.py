@@ -74,6 +74,9 @@ class Solver(object):
     def save_model(self, iter_):
         f = os.path.join(self.save_path, 'REDCNN_{}iter.ckpt'.format(iter_))
         torch.save(self.REDCNN.state_dict(), f)
+        # 保存优化器状态
+        f_opt = os.path.join(self.save_path, 'optimizer_{}iter.pth'.format(iter_))
+        torch.save(self.optimizer.state_dict(), f_opt)
 
 
     def load_model(self, iter_):
@@ -86,6 +89,10 @@ class Solver(object):
             self.REDCNN.load_state_dict(state_d)
         else:
             self.REDCNN.load_state_dict(torch.load(f))
+        # 加载优化器状态
+        f_opt = os.path.join(self.save_path, 'optimizer_{}iter.pth'.format(iter_))
+        if os.path.exists(f_opt):
+            self.optimizer.load_state_dict(torch.load(f_opt))
 
 
     def lr_decay(self):
@@ -129,6 +136,20 @@ class Solver(object):
         train_losses = []
         total_iters = 0
         start_time = time.time()
+        # 断点续训
+        if hasattr(self, 'args') and getattr(self, 'args', None) is not None:
+            args = self.args
+        else:
+            import sys
+            args = sys.modules['__main__'].args if hasattr(sys.modules['__main__'], 'args') else None
+        if args and getattr(args, 'resume', False) and getattr(args, 'resume_iters', 0) > 0:
+            self.load_model(args.resume_iters)
+            total_iters = args.resume_iters
+            # 如果有loss文件也可以加载
+            loss_file = os.path.join(self.save_path, 'loss_{}_iter.npy'.format(args.resume_iters))
+            if os.path.exists(loss_file):
+                train_losses = list(np.load(loss_file))
+
         for epoch in range(1, self.num_epochs):
             self.REDCNN.train(True)
 
@@ -170,12 +191,22 @@ class Solver(object):
     def test(self):
         del self.REDCNN
         # load
-        self.REDCNN = RED_CNN().to(self.device)
+        if self.model_name == 'REDCNN':
+            self.REDCNN = RED_CNN()
+        elif self.model_name == 'MambaIR':
+            self.REDCNN = MambaIR(img_size = self.patch_size, patch_size=8, in_chans=1, embed_dim=96, upscale=1, img_range=1., upsampler='')
+        elif self.model_name == 'DeepGuess':
+            self.REDCNN = ResUNet(img_ch=1, output_ch=1)
+        elif self.model_name == 'DenoMamba':
+            self.REDCNN = DenoMamba(inp_channels=1, out_channels=1)
+        elif self.model_name == 'UKAN':
+            self.REDCNN = UKAN(num_classes=1, input_channels=1, img_size=self.patch_size, patch_size=8, embed_dims=[256, 320, 512])
+        self.REDCNN.to(self.device)
         self.load_model(self.test_iters)
 
-        # compute PSNR, SSIM, RMSE
-        ori_psnr_avg, ori_ssim_avg, ori_rmse_avg = 0, 0, 0
-        pred_psnr_avg, pred_ssim_avg, pred_rmse_avg = 0, 0, 0
+        # compute PSNR, SSIM, RMSE, LPIPS
+        ori_psnr_avg, ori_ssim_avg, ori_rmse_avg, ori_lpips_avg = 0, 0, 0, 0
+        pred_psnr_avg, pred_ssim_avg, pred_rmse_avg, pred_lpips_avg = 0, 0, 0, 0
 
         with torch.no_grad():
             for i, (x, y) in enumerate(self.data_loader):
@@ -196,9 +227,11 @@ class Solver(object):
                 ori_psnr_avg += original_result[0]
                 ori_ssim_avg += original_result[1]
                 ori_rmse_avg += original_result[2]
+                ori_lpips_avg += original_result[3]
                 pred_psnr_avg += pred_result[0]
                 pred_ssim_avg += pred_result[1]
                 pred_rmse_avg += pred_result[2]
+                pred_lpips_avg += pred_result[3]
 
                 # save result figure
                 if self.result_fig:
@@ -208,10 +241,8 @@ class Solver(object):
                                  prefix="Compute measurements ..",
                                  suffix='Complete', length=25)
             print('\n')
-            print('Original === \nPSNR avg: {:.4f} \nSSIM avg: {:.4f} \nRMSE avg: {:.4f}'.format(ori_psnr_avg/len(self.data_loader), 
-                                                                                            ori_ssim_avg/len(self.data_loader), 
-                                                                                            ori_rmse_avg/len(self.data_loader)))
+            print('Original === \nPSNR avg: {:.4f} \nSSIM avg: {:.4f} \nRMSE avg: {:.4f} \nLPIPS avg: {:.4f}'.format(
+                ori_psnr_avg/len(self.data_loader), ori_ssim_avg/len(self.data_loader), ori_rmse_avg/len(self.data_loader), ori_lpips_avg/len(self.data_loader)))
             print('\n')
-            print('Predictions === \nPSNR avg: {:.4f} \nSSIM avg: {:.4f} \nRMSE avg: {:.4f}'.format(pred_psnr_avg/len(self.data_loader), 
-                                                                                                  pred_ssim_avg/len(self.data_loader), 
-                                                                                                  pred_rmse_avg/len(self.data_loader)))
+            print('Predictions === \nPSNR avg: {:.4f} \nSSIM avg: {:.4f} \nRMSE avg: {:.4f} \nLPIPS avg: {:.4f}'.format(
+                pred_psnr_avg/len(self.data_loader), pred_ssim_avg/len(self.data_loader), pred_rmse_avg/len(self.data_loader), pred_lpips_avg/len(self.data_loader)))
