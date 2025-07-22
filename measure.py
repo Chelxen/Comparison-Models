@@ -3,7 +3,10 @@ import numpy as np
 from math import exp
 import torch.nn.functional as F
 from torch.autograd import Variable
+import lpips
 
+
+lpips_fn = lpips.LPIPS(net='alex')  # 只初始化一次
 
 def compute_measure(x, y, pred, data_range):
     original_psnr = compute_PSNR(x, y, data_range)
@@ -12,8 +15,24 @@ def compute_measure(x, y, pred, data_range):
     pred_psnr = compute_PSNR(pred, y, data_range)
     pred_ssim = compute_SSIM(pred, y, data_range)
     pred_rmse = compute_RMSE(pred, y)
-    return (original_psnr, original_ssim, original_rmse), (pred_psnr, pred_ssim, pred_rmse)
+    
+    lpips_pred = lpips_fn(to_lpips_tensor(pred), to_lpips_tensor(y)).item()
+    lpips_ori = lpips_fn(to_lpips_tensor(x), to_lpips_tensor(y)).item()
+    
+    return (original_psnr, original_ssim, original_rmse, lpips_ori), (pred_psnr, pred_ssim, pred_rmse, lpips_pred)
 
+def to_lpips_tensor(img):
+    if isinstance(img, torch.Tensor):
+        if img.dim() == 2:
+            img = img.unsqueeze(0)
+        if img.size(0) == 1:
+            img = img.unsqueeze(0)
+        if img.size(1) == 1:
+            img = img.repeat(1,3,1,1)
+        img = (img - img.min()) / (img.max() - img.min() + 1e-8) * 2 - 1
+        return img
+    else:
+        raise ValueError("LPIPS must be torch.Tensor")
 
 def compute_MSE(img1, img2):
     return ((img1 - img2) ** 2).mean()
