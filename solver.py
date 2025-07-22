@@ -136,7 +136,7 @@ class Solver(object):
         train_losses = []
         total_iters = 0
         start_time = time.time()
-        # 断点续训
+        # resume training from checkpoint
         if hasattr(self, 'args') and getattr(self, 'args', None) is not None:
             args = self.args
         else:
@@ -145,7 +145,7 @@ class Solver(object):
         if args and getattr(args, 'resume', False) and getattr(args, 'resume_iters', 0) > 0:
             self.load_model(args.resume_iters)
             total_iters = args.resume_iters
-            # 如果有loss文件也可以加载
+            # also load loss file if it exists
             loss_file = os.path.join(self.save_path, 'loss_{}_iter.npy'.format(args.resume_iters))
             if os.path.exists(loss_file):
                 train_losses = list(np.load(loss_file))
@@ -205,8 +205,8 @@ class Solver(object):
         self.load_model(self.test_iters)
 
         # compute PSNR, SSIM, RMSE, LPIPS
-        ori_psnr_avg, ori_ssim_avg, ori_rmse_avg, ori_lpips_avg = 0, 0, 0, 0
-        pred_psnr_avg, pred_ssim_avg, pred_rmse_avg, pred_lpips_avg = 0, 0, 0, 0
+        ori_psnr_list, ori_ssim_list, ori_rmse_list, ori_lpips_list = [], [], [], []
+        pred_psnr_list, pred_ssim_list, pred_rmse_list, pred_lpips_list = [], [], [], []
 
         with torch.no_grad():
             for i, (x, y) in enumerate(self.data_loader):
@@ -224,14 +224,14 @@ class Solver(object):
                 data_range = self.trunc_max - self.trunc_min
 
                 original_result, pred_result = compute_measure(x, y, pred, data_range)
-                ori_psnr_avg += original_result[0]
-                ori_ssim_avg += original_result[1]
-                ori_rmse_avg += original_result[2]
-                ori_lpips_avg += original_result[3]
-                pred_psnr_avg += pred_result[0]
-                pred_ssim_avg += pred_result[1]
-                pred_rmse_avg += pred_result[2]
-                pred_lpips_avg += pred_result[3]
+                ori_psnr_list.append(original_result[0])
+                ori_ssim_list.append(original_result[1])
+                ori_rmse_list.append(original_result[2])
+                ori_lpips_list.append(original_result[3])
+                pred_psnr_list.append(pred_result[0])
+                pred_ssim_list.append(pred_result[1])
+                pred_rmse_list.append(pred_result[2])
+                pred_lpips_list.append(pred_result[3])
 
                 # save result figure
                 if self.result_fig:
@@ -241,8 +241,26 @@ class Solver(object):
                                  prefix="Compute measurements ..",
                                  suffix='Complete', length=25)
             print('\n')
-            print('Original === \nPSNR avg: {:.4f} \nSSIM avg: {:.4f} \nRMSE avg: {:.4f} \nLPIPS avg: {:.4f}'.format(
-                ori_psnr_avg/len(self.data_loader), ori_ssim_avg/len(self.data_loader), ori_rmse_avg/len(self.data_loader), ori_lpips_avg/len(self.data_loader)))
-            print('\n')
-            print('Predictions === \nPSNR avg: {:.4f} \nSSIM avg: {:.4f} \nRMSE avg: {:.4f} \nLPIPS avg: {:.4f}'.format(
-                pred_psnr_avg/len(self.data_loader), pred_ssim_avg/len(self.data_loader), pred_rmse_avg/len(self.data_loader), pred_lpips_avg/len(self.data_loader)))
+
+            def mean_std_str(arr):
+                arr = np.array(arr)
+                return "{:.4f}±{:.4f}".format(arr.mean(), arr.std())
+            
+            ori_psnr_str = mean_std_str(ori_psnr_list)
+            ori_ssim_str = mean_std_str(ori_ssim_list)
+            ori_rmse_str = mean_std_str(ori_rmse_list)
+            ori_lpips_str = mean_std_str(ori_lpips_list)
+
+            pred_psnr_str = mean_std_str(pred_psnr_list)
+            pred_ssim_str = mean_std_str(pred_ssim_list)
+            pred_rmse_str = mean_std_str(pred_rmse_list)
+            pred_lpips_str = mean_std_str(pred_lpips_list)
+
+            result_str = ''
+            result_str += 'Original ===\nPSNR: {}\nSSIM: {}\nRMSE: {}\nLPIPS: {}\n'.format(ori_psnr_str, ori_ssim_str, ori_rmse_str, ori_lpips_str)
+            result_str += '\nPredictions ===\nPSNR: {}\nSSIM: {}\nRMSE: {}\nLPIPS: {}\n'.format(pred_psnr_str, pred_ssim_str, pred_rmse_str, pred_lpips_str)
+            print(result_str)
+
+            # 保存到txt
+            with open(os.path.join(self.save_path, 'test_results.txt'), 'w') as f:
+                f.write(result_str)
