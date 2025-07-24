@@ -19,6 +19,9 @@ from DeepGuess.architectures import ResUNet
 from UKAN.archs import UKAN
 from DenoMamba.model.denomamba_arch import DenoMamba
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 class Solver(object):
     def __init__(self, args, data_loader, model_name):
         self.mode = args.mode
@@ -143,6 +146,10 @@ class Solver(object):
 
 
     def train(self):
+
+        NumOfParam = count_parameters(self.REDCNN)
+        print('trainable parameter:', NumOfParam)
+
         train_losses = []
         total_iters = 0
         start_time = time.time()
@@ -202,6 +209,7 @@ class Solver(object):
 
 
     def test(self):
+
         del self.REDCNN
         # load
         if self.model_name == 'REDCNN':
@@ -216,6 +224,9 @@ class Solver(object):
             self.REDCNN = UKAN(num_classes=1, input_channels=1, img_size=self.patch_size, patch_size=8, embed_dims=[256, 320, 512])
         self.REDCNN.to(self.device)
         self.load_model(self.test_iters,self.model_name)
+        
+        NumOfParam = count_parameters(self.REDCNN)
+        print('trainable parameter:', NumOfParam)
 
         # compute PSNR, SSIM, RMSE, LPIPS
         ori_psnr_list, ori_ssim_list, ori_rmse_list, ori_lpips_list = [], [], [], []
@@ -272,6 +283,7 @@ class Solver(object):
             result_str = ''
             result_str += 'Original ===\nPSNR: {}\nSSIM: {}\nRMSE: {}\nLPIPS: {}\n'.format(ori_psnr_str, ori_ssim_str, ori_rmse_str, ori_lpips_str)
             result_str += '\nPredictions ===\nPSNR: {}\nSSIM: {}\nRMSE: {}\nLPIPS: {}\n'.format(pred_psnr_str, pred_ssim_str, pred_rmse_str, pred_lpips_str)
+            result_str += '\nTrainable parameter: {}\n'.format(NumOfParam)
             print(result_str)
 
             # 保存到txt
