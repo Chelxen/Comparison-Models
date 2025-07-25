@@ -239,6 +239,8 @@ class Solver(object):
         #init
         start_time = time.time()
         per_image_metrics = []
+        save_idx = getattr(self, 'args', None).save_idx if hasattr(self, 'args') and hasattr(self.args, 'save_idx') else -1
+        
         with torch.no_grad():
             for i, (x, y) in enumerate(self.data_loader):
                 shape_ = x.shape[-1]
@@ -280,6 +282,22 @@ class Solver(object):
                 # save result figure
                 if self.result_fig:
                     self.save_fig(x, y, pred, i, original_result, pred_result)
+
+                # 保存第idx张concat图像
+                if save_idx >= 0 and i == save_idx:
+                    import numpy as np
+                    import matplotlib.pyplot as plt
+                    concat_img = np.concatenate([
+                        x.unsqueeze(0).numpy(),
+                        pred.unsqueeze(0).numpy(),
+                        y.unsqueeze(0).numpy()
+                    ], axis=1)  # shape: (1, 3*H, W)
+                    concat_img = np.squeeze(concat_img)
+                    # 变成(H, 3*W)
+                    concat_img = np.concatenate([
+                        x.numpy(), pred.numpy(), y.numpy()
+                    ], axis=1)
+                    plt.imsave(os.path.join(self.save_path, f'concat_image_{i}.png'), concat_img, cmap='gray', vmin=self.trunc_min, vmax=self.trunc_max)
 
                 printProgressBar(i, len(self.data_loader),
                                  prefix="Compute measurements ..",
