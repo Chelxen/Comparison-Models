@@ -19,6 +19,10 @@ from DeepGuess.architectures import ResUNet
 from UKAN.archs import UKAN
 from DenoMamba.model.denomamba_arch import DenoMamba
 
+import time
+import csv
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -232,6 +236,9 @@ class Solver(object):
         ori_psnr_list, ori_ssim_list, ori_rmse_list, ori_lpips_list = [], [], [], []
         pred_psnr_list, pred_ssim_list, pred_rmse_list, pred_lpips_list = [], [], [], []
 
+        #init
+        start_time = time.time()
+        per_image_metrics = []
         with torch.no_grad():
             for i, (x, y) in enumerate(self.data_loader):
                 shape_ = x.shape[-1]
@@ -257,6 +264,19 @@ class Solver(object):
                 pred_rmse_list.append(pred_result[2])
                 pred_lpips_list.append(pred_result[3])
 
+                # 保存每张图片的指标到列表
+                per_image_metrics.append({
+                    'index': i,
+                    'ori_psnr': original_result[0],
+                    'ori_ssim': original_result[1],
+                    'ori_rmse': original_result[2],
+                    'ori_lpips': original_result[3],
+                    'pred_psnr': pred_result[0],
+                    'pred_ssim': pred_result[1],
+                    'pred_rmse': pred_result[2],
+                    'pred_lpips': pred_result[3],
+                })
+
                 # save result figure
                 if self.result_fig:
                     self.save_fig(x, y, pred, i, original_result, pred_result)
@@ -280,12 +300,33 @@ class Solver(object):
             pred_rmse_str = mean_std_str(pred_rmse_list)
             pred_lpips_str = mean_std_str(pred_lpips_list)
 
+            # inference time
+            total_time = time.time() - start_time
+
+            num_samples = len(self.data_loader)
+            throughput = num_samples / total_time if total_time > 0 else 0
+            latency = total_time / num_samples if num_samples > 0 else 0
+            
+            time_str = 'Total test time: {:.2f} seconds ({:.2f} minutes)\n'.format(total_time, total_time/60)
+            time_str += 'Throughput: {:.2f} images/s\n'.format(throughput)
+            time_str += 'Latency: {:.4f} s/image\n'.format(latency)
+
             result_str = ''
             result_str += 'Original ===\nPSNR: {}\nSSIM: {}\nRMSE: {}\nLPIPS: {}\n'.format(ori_psnr_str, ori_ssim_str, ori_rmse_str, ori_lpips_str)
             result_str += '\nPredictions ===\nPSNR: {}\nSSIM: {}\nRMSE: {}\nLPIPS: {}\n'.format(pred_psnr_str, pred_ssim_str, pred_rmse_str, pred_lpips_str)
             result_str += '\nTrainable parameter: {}\n'.format(NumOfParam)
+            result_str += time_str
             print(result_str)
 
             # 保存到txt
             with open(os.path.join(self.save_path, 'test_results.txt'), 'w') as f:
                 f.write(result_str)
+
+            # 保存每张图片的指标到csv
+            csv_path = os.path.join(self.save_path, 'test_image_metrics.csv')
+            with open(csv_path, 'w', newline='') as csvfile:
+                fieldnames = ['index', 'ori_psnr', 'ori_ssim', 'ori_rmse', 'ori_lpips', 'pred_psnr', 'pred_ssim', 'pred_rmse', 'pred_lpips']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in per_image_metrics:
+                    writer.writerow(row)
