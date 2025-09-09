@@ -3,7 +3,7 @@ import argparse
 from torch.backends import cudnn
 # from loader import get_loader      #original
 from loader_normalized import get_loader
-from solver import Solver
+from solver4wday import Solver
 
 
 def main(args):
