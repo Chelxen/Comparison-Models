@@ -79,37 +79,50 @@ class Solver(object):
 
 
     def save_model(self, iter_, model_name, epoch=None):
-        f = os.path.join(self.save_path, '{}_{}iter.ckpt'.format(model_name, iter_))
-        torch.save(self.REDCNN.state_dict(), f)
-        # 保存优化器状态
-        f_opt = os.path.join(self.save_path, '{}_optimizer_{}iter.pth'.format(model_name, iter_))
-        torch.save(self.optimizer.state_dict(), f_opt)
-        # 保存当前epoch
-        if epoch is not None:
-            with open(os.path.join(self.save_path, '{}_epoch_{}iter.txt'.format(model_name, iter_)), 'w') as f_epoch:
-                f_epoch.write(str(epoch))
+        # 统一使用单一 checkpoint 文件，包含模型、优化器与 epoch
+        f = os.path.join(self.save_path, 'checkpoint.pth')
+        ckpt = {
+            'model': self.REDCNN.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'epoch': int(epoch) if epoch is not None else 0,
+            'model_name': self.model_name,
+        }
+        torch.save(ckpt, f)
 
 
     def load_model(self, iter_, model_name):
-        f = os.path.join(self.save_path, '{}_{}iter.ckpt'.format(model_name, iter_))
-        if self.multi_gpu:
-            state_d = OrderedDict()
-            for k, v in torch.load(f):
-                n = k[7:]
-                state_d[n] = v
-            self.REDCNN.load_state_dict(state_d)
-        else:
-            self.REDCNN.load_state_dict(torch.load(f))
-        # 加载优化器状态
-        f_opt = os.path.join(self.save_path, '{}_optimizer_{}iter.pth'.format(model_name, iter_))
-        if os.path.exists(f_opt):
-            self.optimizer.load_state_dict(torch.load(f_opt))
-        # 加载epoch
-        epoch_file = os.path.join(self.save_path, '{}_epoch_{}iter.txt'.format(model_name, iter_))
-        if os.path.exists(epoch_file):
-            with open(epoch_file, 'r') as f_epoch:
-                return int(f_epoch.read().strip())
-        return None
+        # 与保存一致，统一从 checkpoint.pth 恢复
+        f = os.path.join(self.save_path, 'checkpoint.pth')
+        if not os.path.exists(f):
+            return None
+        ckpt = torch.load(f, map_location=self.device)
+
+        # 兼容旧权重，仅包含纯 state_dict 的情况
+        state_dict = ckpt.get('model', ckpt)
+
+        def adapt_state_dict_keys(input_state_dict, need_module_prefix):
+            new_state_dict = OrderedDict()
+            for k, v in input_state_dict.items():
+                if need_module_prefix and not k.startswith('module.'):
+                    new_state_dict['module.' + k] = v
+                elif (not need_module_prefix) and k.startswith('module.'):
+                    new_state_dict[k[7:]] = v
+                else:
+                    new_state_dict[k] = v
+            return new_state_dict
+
+        need_module = isinstance(self.REDCNN, nn.DataParallel)
+        state_dict = adapt_state_dict_keys(state_dict, need_module)
+        self.REDCNN.load_state_dict(state_dict, strict=False)
+
+        # 优化器
+        if isinstance(ckpt, dict) and 'optimizer' in ckpt:
+            try:
+                self.optimizer.load_state_dict(ckpt['optimizer'])
+            except Exception:
+                pass
+
+        return ckpt.get('epoch', None) if isinstance(ckpt, dict) else None
 
 
     def lr_decay(self):
@@ -158,21 +171,16 @@ class Solver(object):
         total_iters = 0
         start_time = time.time()
         start_epoch = 1
-        # resume training from checkpoint
+        # resume training from checkpoint（统一从 checkpoint.pth 恢复）
         if hasattr(self, 'args') and getattr(self, 'args', None) is not None:
             args = self.args
         else:
             import sys
             args = sys.modules['__main__'].args if hasattr(sys.modules['__main__'], 'args') else None
-        if args and getattr(args, 'resume', False) and getattr(args, 'resume_iters', 0) > 0:
-            loaded_epoch = self.load_model(args.resume_iters, self.model_name)
-            total_iters = args.resume_iters
+        if args and getattr(args, 'resume', False):
+            loaded_epoch = self.load_model(None, None)
             if loaded_epoch is not None:
                 start_epoch = loaded_epoch + 1
-            # also load loss file if it exists
-            loss_file = os.path.join(self.save_path, '{}_loss_{}_iter.npy'.format(self.model_name, args.resume_iters))
-            if os.path.exists(loss_file):
-                train_losses = list(np.load(loss_file))
 
         for epoch in range(start_epoch, self.num_epochs):
             self.REDCNN.train(True)
@@ -206,10 +214,9 @@ class Solver(object):
                 # learning rate decay
                 if total_iters % self.decay_iters == 0:
                     self.lr_decay()
-                # save model
+                # save model（统一保存到 checkpoint.pth）
                 if total_iters % self.save_iters == 0:
                     self.save_model(total_iters, self.model_name, epoch)
-                    np.save(os.path.join(self.save_path, '{}_loss_{}_iter.npy'.format(self.model_name, total_iters)), np.array(train_losses))
 
 
     def test(self):
@@ -227,7 +234,7 @@ class Solver(object):
         elif self.model_name == 'UKAN':
             self.REDCNN = UKAN(num_classes=1, input_channels=1, img_size=self.patch_size, patch_size=8, embed_dims=[256, 320, 512])
         self.REDCNN.to(self.device)
-        self.load_model(self.test_iters,self.model_name)
+        self.load_model(None, None)
         
         NumOfParam = count_parameters(self.REDCNN)
         print('trainable parameter:', NumOfParam)

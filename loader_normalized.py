@@ -3,11 +3,13 @@ from glob import glob
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
-
+'''
+直接加载服务器上的AAPM normalized数据
+'''
 class ct_dataset(Dataset):
     def __init__(self, mode, load_mode, saved_path, test_patient, patch_n=None, patch_size=None, transform=None):
         assert mode in ['train', 'test'], "mode is 'train' or 'test'"
-        assert load_mode in [0,1], "load_mode is 0 or 1"
+        assert load_mode in [0,1], "load_mode is 0 or 1"             # 0: load batch data, 1: load all data
 
         input_path = sorted(glob(os.path.join(saved_path, '*_input.npy')))
         target_path = sorted(glob(os.path.join(saved_path, '*_target.npy')))
@@ -78,7 +80,7 @@ def get_patch(full_input_img, full_target_img, patch_n, patch_size):
 def get_loader(mode='train', load_mode=0,
                saved_path=None, test_patient='L506',
                patch_n=None, patch_size=None,
-               transform=None, batch_size=32, num_workers=6):
+               transform=None, batch_size=32, num_workers=2):
     dataset_ = ct_dataset(mode, load_mode, saved_path, test_patient, patch_n, patch_size, transform)
     data_loader = DataLoader(dataset=dataset_, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     return data_loader

@@ -72,8 +72,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str)
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--multi_gpu', type=bool, default=False)
-    parser.add_argument('--resume', type=bool, default=False, help='resume training from checkpoint')
-    parser.add_argument('--resume_iters', type=int, default=0, help='the number of iterations to resume training from')
+    parser.add_argument('--resume', type=bool, default=False, help='从 save_path/checkpoint.pth 恢复训练')
     parser.add_argument('--save_idx', type=int, default=-1, help='save the idx-th image')
 
     args = parser.parse_args()
